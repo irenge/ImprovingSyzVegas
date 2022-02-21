@@ -16,6 +16,12 @@ type TotalReward struct {
 	EstimatedRewardGenerate float64 // Estimated reward for Generate. Used for weight deciding
 	EstimatedRewardMutate   float64 // Estimated reward for Mutate. Used for weight deciding
 	EstimatedRewardTriage   float64 // Estimated reward for Triage. Used for weight deciding
+	EstimatedRewardSquashAny  float64
+	EstimatedRewardSplice     float64
+	EstimatedRewardInsertCall float64
+	EstimatedRewardMutateArg  float64
+	EstimatedRewardRemoveCall float64
+
 	RawAllTasks             Reward  // Raw cov/time for all Gen/Mut/Tri. Used for computing expected time
 	RewardAllTasks          Reward  // Cov/time converted to reward for all Gen/Mut/Tri. Used for normalization
 

@@ -59,6 +59,11 @@ func (status *MABStatus) ResetTS() {
 	status.Reward.EstimatedRewardGenerate = 0.0
 	status.Reward.EstimatedRewardMutate = 0.0
 	status.Reward.EstimatedRewardTriage = 0.0
+	status.Reward.EstimatedRewardRemoveCall = 0.0
+	status.Reward.EstimatedRewardMutateArg = 0.0
+	status.Reward.EstimatedRewardInsertCall = 0.0
+	status.Reward.EstimatedRewardSplice = 0.0
+        status.Reward.EstimatedRewardSquashAny = 0.0
 	status.Reward.RewardAllTasks = mab.Reward{}
 }
 
@@ -68,8 +73,8 @@ func (status *MABStatus) BootstrapExp31() {
 	status.Exp31Threshold = 3.0 * math.Log(3.0) * math.Exp2(2.0*float64(status.Exp31Round)) / (math.E - 1.0)
 	status.Exp31Threshold = status.Exp31Threshold - (3.0 / status.TSGamma)
 	log.Logf(MABLogLevel,
-		"MAB Exp3.1 New Round %v, Gamma: %v, Eta: %v, Threshold: %v\n",
-		status.Exp31Round, status.TSGamma, status.TSEta, status.Exp31Threshold)
+	"MAB Exp3.1 New Round %v, Gamma: %v, Eta: %v, Threshold: %v\n",
+	status.Exp31Round, status.TSGamma, status.TSEta, status.Exp31Threshold)
 }
 
 func (status *MABStatus) UpdateSeedWeight(pidx int, reward float64) {
@@ -87,8 +92,8 @@ func (status *MABStatus) UpdateSeedWeight(pidx int, reward float64) {
 		prio = weightThresholdMin
 	}
 	log.Logf(MABLogLevel, "MAB Corpus %v, %v: %v -> %v",
-		pidx, status.fuzzer.corpus[pidx].CorpusReward.MutateRewardOrig,
-		status.fuzzer.corpusPrios[pidx], prio)
+	pidx, status.fuzzer.corpus[pidx].CorpusReward.MutateRewardOrig,
+	status.fuzzer.corpusPrios[pidx], prio)
 	status.fuzzer.corpusPrios[pidx] = prio
 	if pidx == 0 {
 		status.fuzzer.sumPrios[pidx] = status.fuzzer.corpusPrios[pidx]
@@ -166,8 +171,8 @@ func (status *MABStatus) UpdateMutateWeight(result mab.ExecResult, pr []float64)
 		totalTimeSave := float64(mutateCnt) * timeSave
 		if totalTimeMutCur+timeVerify == 0.0 {
 			log.Logf(MABLogLevel,
-				"MAB Error: timeVerify(%v) + timeMut(%v) == 0\n",
-				timeVerify, totalTimeMutCur)
+			"MAB Error: timeVerify(%v) + timeMut(%v) == 0\n",
+			timeVerify, totalTimeMutCur)
 			// Update raw coverage and time for future reward computation and normalization
 			status.Reward.RawAllTasks.Update(cov, time)
 			status.Reward.RawMutateOnly.Update(cov, time)
@@ -178,31 +183,31 @@ func (status *MABStatus) UpdateMutateWeight(result mab.ExecResult, pr []float64)
 		rewardMinimizeCov := status.ComputeTSReward(covMinimize, timeMinimize)
 		rewardMinimizeCur := rewardMinimizeCov + totalTimeSave
 		log.Logf(MABLogLevel, "MAB Assoc Minimize Reward: %v + %v * %v = %v\n",
-			rewardMinimizeCov, mutateCnt, timeSave, rewardMinimizeCur)
+		rewardMinimizeCov, mutateCnt, timeSave, rewardMinimizeCur)
 		// Verification reward: Partial mutation coverage vs verification time
 		assocCovVerify := totalCovMutCur * timeVerify / (totalTimeMutCur + timeVerify)
 		rewardVerifyCur := status.ComputeTSReward(assocCovVerify, timeVerify)
 		log.Logf(MABLogLevel, "MAB Assoc Verify Reward: R((%v + %v) * %v / %v = %v, %v) = %v",
-			status.fuzzer.corpus[pidx].CorpusReward.MutateCov, cov,
-			timeVerify, totalTimeMutCur+timeVerify, assocCovVerify, timeVerify, rewardVerifyCur)
+		status.fuzzer.corpus[pidx].CorpusReward.MutateCov, cov,
+		timeVerify, totalTimeMutCur+timeVerify, assocCovVerify, timeVerify, rewardVerifyCur)
 		// Triage reward: minimize + triage
 		rewardTriageCurrent := rewardVerifyCur + rewardMinimizeCur
 		log.Logf(MABLogLevel, "MAB Triage Reward: %v + %v = %v",
-			rewardVerifyCur, rewardMinimizeCur, rewardTriageCurrent)
+		rewardVerifyCur, rewardMinimizeCur, rewardTriageCurrent)
 		// Mutation reward: Share partial mutation coverage to verification.
 		assocCovMutCur := totalCovMutCur * totalTimeMutCur / (totalTimeMutCur + timeVerify)
 		rewardMutCur := status.ComputeTSReward(assocCovMutCur, totalTimeMutCur)
 		log.Logf(MABLogLevel,
-			"MAB Mutate Reward: R((%v + %v) * (%v + %v) / %v = %v, %v) = %v\n",
-			p.CorpusReward.MutateCov, cov, p.CorpusReward.MutateTime, time,
-			totalTimeMutCur+timeVerify, assocCovMutCur, totalTimeMutCur, rewardMutCur)
+		"MAB Mutate Reward: R((%v + %v) * (%v + %v) / %v = %v, %v) = %v\n",
+		p.CorpusReward.MutateCov, cov, p.CorpusReward.MutateTime, time,
+		totalTimeMutCur+timeVerify, assocCovMutCur, totalTimeMutCur, rewardMutCur)
 		// Compute x
 		rewardMutDiff := rewardMutCur - rewardMutPrev
 		rewardTriDiff := rewardTriageCurrent - rewardTriPrev
 		log.Logf(MABLogLevel, "MAB Triage Reward Diff: %v - %v = %v\n",
-			rewardTriageCurrent, rewardTriPrev, rewardTriDiff)
+		rewardTriageCurrent, rewardTriPrev, rewardTriDiff)
 		log.Logf(MABLogLevel, "MAB Mutate Reward Diff: %v - %v = %v\n",
-			rewardMutCur, rewardMutPrev, rewardMutDiff)
+		rewardMutCur, rewardMutPrev, rewardMutDiff)
 		rewardNormMutDiff := status.NormalizeTSReward(rewardMutDiff)
 		rewardNormTriDiff := status.NormalizeTSReward(rewardTriDiff)
 		rewardEstMut := status.EstimateTSReward(rewardNormMutDiff, pr[1])
@@ -227,14 +232,14 @@ func (status *MABStatus) UpdateMutateWeight(result mab.ExecResult, pr []float64)
 		rewardSS := status.ComputeSSReward(cov, time)
 		rewardSSNorm := status.NormalizeSSReward(rewardSS)
 		rewardSSEst := status.EstimateSSReward(rewardSSNorm,
-			status.fuzzer.corpusPrios[pidx]/status.fuzzer.sumPrios[len(status.fuzzer.sumPrios)-1])
+		status.fuzzer.corpusPrios[pidx]/status.fuzzer.sumPrios[len(status.fuzzer.sumPrios)-1])
 		status.UpdateSeedWeight(pidx, rewardSSEst)
 		status.Reward.RewardMutateOnly.Update(rewardSS, 0.0)
 	}
 	status.fuzzer.corpus[pidx].CorpusReward.MutateCount++
 	sig := hash.Hash(status.fuzzer.corpus[pidx].Serialize())
 	log.Logf(MABLogLevel, "MAB Mutate Count for %v(%v): %v\n",
-		pidx, sig.String(), status.fuzzer.corpus[pidx].CorpusReward.MutateCount)
+	pidx, sig.String(), status.fuzzer.corpus[pidx].CorpusReward.MutateCount)
 	status.Reward.RawAllTasks.Update(cov, time)
 	status.Reward.RawMutateOnly.Update(cov, time)
 }
@@ -254,14 +259,14 @@ func (status *MABStatus) UpdateWeight(itemType int, result interface{}, pr []flo
 	defer func() {
 		log.Logf(MABLogLevel, "MAB Round %v GLC: %+v\n", status.Round, status.Reward)
 		exp31Max := math.Max(status.Reward.EstimatedRewardGenerate,
-			math.Max(status.Reward.EstimatedRewardMutate,
-				status.Reward.EstimatedRewardTriage))
+		math.Max(status.Reward.EstimatedRewardMutate,
+		status.Reward.EstimatedRewardTriage))
 		exp31Min := math.Min(status.Reward.EstimatedRewardGenerate,
-			math.Min(status.Reward.EstimatedRewardMutate,
-				status.Reward.EstimatedRewardTriage))
+		math.Min(status.Reward.EstimatedRewardMutate,
+		status.Reward.EstimatedRewardTriage))
 		if exp31Max-exp31Min > status.Exp31Threshold ||
-			exp31Max > status.Exp31Threshold ||
-			math.Abs(exp31Min) > status.Exp31Threshold {
+		exp31Max > status.Exp31Threshold ||
+		math.Abs(exp31Min) > status.Exp31Threshold {
 			status.Exp31Round++
 			status.ResetTS()
 			status.BootstrapExp31()

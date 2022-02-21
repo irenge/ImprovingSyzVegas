@@ -44,8 +44,10 @@ func (status *MABStatus) GetTSWeight(lock bool) []float64 {
 		status.MABMu.Lock()
 		defer status.MABMu.Unlock()
 	}
-	x := []float64{0.0, 0.0, 0.0}
-	weight := []float64{1.0, 1.0, 1.0}
+	x := []float64{0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0}
+	y := []float64{0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0}
+
+	weight := []float64{1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0}
 	eta := status.TSEta
 	const (
 		MABWeightThresholdMax = 1.0e+300
@@ -54,23 +56,22 @@ func (status *MABStatus) GetTSWeight(lock bool) []float64 {
 	x[0] = eta * status.Reward.EstimatedRewardGenerate
 	x[1] = eta * status.Reward.EstimatedRewardMutate
 	x[2] = eta * status.Reward.EstimatedRewardTriage
-	log.Logf(MABLogLevel, "MABWeight %v\n", x)
-	// Compute median to prevent overflow
-	median := x[0]
-	if x[0] > x[1] {
-		if x[1] > x[2] {
-			median = x[1]
-		} else if x[0] > x[2] {
-			median = x[2]
-		}
-	} else {
-		if x[1] < x[2] {
-			median = x[1]
-		} else if x[0] < x[2] {
-			median = x[2]
-		}
+	x[3] = eta * status.Reward.EstimatedRewardRemoveCall
+	x[4] = eta * status.Reward.EstimatedRewardMutateArg
+	x[5] = eta * status.Reward.EstimatedRewardInsertCall 
+	x[6] = eta * status.Reward.EstimatedRewardSplice
+	x[7] = eta * status.Reward.EstimatedRewardSquashAny  
+
+	for a:= 0; a < 8; a++ {
+		y[a] = x[a]
 	}
-	for i := 0; i <= 2; i++ {
+
+	log.Logf(MABLogLevel, "MABWeight %v\n", x)
+	sort.Float64s(y) 
+	// Compute median to prevent overflow
+	median := (y[3] + y[4]) / 2
+	
+	for i := 0; i < 8; i++ {
 		weight[i] = math.Exp(x[i] - median)
 		if weight[i] > MABWeightThresholdMax {
 			weight[i] = MABWeightThresholdMax
