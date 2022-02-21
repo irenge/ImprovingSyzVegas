@@ -244,6 +244,116 @@ func (status *MABStatus) UpdateMutateWeight(result mab.ExecResult, pr []float64)
 	status.Reward.RawMutateOnly.Update(cov, time)
 }
 
+// ====
+
+func (status *MABStatus) UpdateMutateArgWeight(result mab.ExecResult, pr []float64) {
+        cov := float64(result.Cov)
+        time := result.TimeExec
+        pidx := result.Pidx
+        if pidx < 0 || pidx > len(status.fuzzer.corpus) {
+                log.Logf(MABLogLevel, "MAB Error: pidx = %v out of range\n", pidx)
+                return
+        }
+        if status.TSEnabled {
+                p := status.fuzzer.corpus[pidx]
+                mutateArgCnt := p.CorpusReward.MutateArgCount
+                timeVerify := p.CorpusReward.VerifyTime
+                timeMinimize := p.CorpusReward.MinimizeTime
+                covMinimize := p.CorpusReward.MinimizeCov
+                // After this mutation, total coverage gain by mutating this seed
+                totalCovMutArgCur := p.CorpusReward.MutateAgrCov + cov
+                // After this mutation, total time cost of mutating this seed
+                totalTimeMutArgCur := p.CorpusReward.MutateArgTime + time
+                // Before this mutation, reward for mutating this seed
+                rewardMutArgPrev := p.CorpusReward.MutateArgReward
+                // Before this mutation, reward for triaging this seed
+                rewardTriPrev := p.CorpusReward.TriageReward
+                timeSave := p.CorpusReward.MinimizeTimeSave
+                // Total estimated time save due to minimization
+                totalTimeSave := float64(mutateArgCnt) * timeSave
+                if totalTimeMutArgCur+timeVerify == 0.0 {
+                        log.Logf(MABLogLevel,
+                        "MAB Error: timeVerify(%v) + timeMut(%v) == 0\n",
+                        timeVerify, totalTimeMutCur)
+                        // Update raw coverage and time for future reward computation and normalization
+                        status.Reward.RawAllTasks.Update(cov, time)
+                        status.Reward.RawMutateOnly.Update(cov, time)
+                        return
+                }
+                // Distribut gain considering minimize effect
+                // Minimize reward: Coverage/time reward + time saved
+                rewardMinimizeCov := status.ComputeTSReward(covMinimize, timeMinimize)
+                rewardMinimizeCur := rewardMinimizeCov + totalTimeSave
+                log.Logf(MABLogLevel, "MAB Assoc Minimize Reward: %v + %v * %v = %v\n",
+                rewardMinimizeCov, mutateCnt, timeSave, rewardMinimizeCur)
+                // Verification reward: Partial mutation coverage vs verification time
+                assocCovVerify := totalCovMutCur * timeVerify / (totalTimeMutCur + timeVerify)
+                rewardVerifyCur := status.ComputeTSReward(assocCovVerify, timeVerify)
+                log.Logf(MABLogLevel, "MAB Assoc Verify Reward: R((%v + %v) * %v / %v = %v, %v) = %v",
+                status.fuzzer.corpus[pidx].CorpusReward.MutateCov, cov,
+                timeVerify, totalTimeMutCur+timeVerify, assocCovVerify, timeVerify, rewardVerifyCur)
+                // Triage reward: minimize + triage
+                rewardTriageCurrent := rewardVerifyCur + rewardMinimizeCur
+                log.Logf(MABLogLevel, "MAB Triage Reward: %v + %v = %v",
+                rewardVerifyCur, rewardMinimizeCur, rewardTriageCurrent)
+                // Mutation reward: Share partial mutation coverage to verification
+		assocCovMutCur := totalCovMutCur * totalTimeMutCur / (totalTimeMutCur + timeVerify)
+                rewardMutCur := status.ComputeTSReward(assocCovMutCur, totalTimeMutCur)
+                log.Logf(MABLogLevel,
+                "MAB Mutate Reward: R((%v + %v) * (%v + %v) / %v = %v, %v) = %v\n",
+                p.CorpusReward.MutateCov, cov, p.CorpusReward.MutateTime, time,
+                totalTimeMutCur+timeVerify, assocCovMutCur, totalTimeMutCur, rewardMutCur)
+                // Compute x
+                rewardMutDiff := rewardMutCur - rewardMutPrev
+                rewardTriDiff := rewardTriageCurrent - rewardTriPrev
+                log.Logf(MABLogLevel, "MAB Triage Reward Diff: %v - %v = %v\n",
+                rewardTriageCurrent, rewardTriPrev, rewardTriDiff)
+                log.Logf(MABLogLevel, "MAB Mutate Reward Diff: %v - %v = %v\n",
+                rewardMutCur, rewardMutPrev, rewardMutDiff)
+                rewardNormMutDiff := status.NormalizeTSReward(rewardMutDiff)
+                rewardNormTriDiff := status.NormalizeTSReward(rewardTriDiff)
+                rewardEstMut := status.EstimateTSReward(rewardNormMutDiff, pr[1])
+                // Triage might be unavailable this time, as a result, compute triage's probality as if triage is available
+                // Fortunately, we know that mutation is definitely available. Use that as an estimation
+                rewardEstTri := status.EstimateTSReward(rewardNormTriDiff, pr[1])
+                status.Reward.EstimatedRewardMutate += rewardEstMut
+                status.Reward.EstimatedRewardTriage += rewardEstTri
+                // Update program stat
+                status.fuzzer.corpus[pidx].CorpusReward.MutateCov = totalCovMutCur
+                status.fuzzer.corpus[pidx].CorpusReward.MutateTime = totalTimeMutCur
+                status.fuzzer.corpus[pidx].CorpusReward.MutateReward = rewardMutCur
+                status.fuzzer.corpus[pidx].CorpusReward.TriageReward = rewardTriageCurrent
+                // Don't use associated gain for normalization
+                rewardNoassocNorm := status.ComputeTSReward(cov, time)
+                status.Reward.RewardAllTasks.Update(rewardNoassocNorm, 0.0)
+        }
+        // Mark for update
+        status.CorpusUpdate[pidx] = 1
+        // Update for seed selection MAB
+        if status.SSEnabled {
+                rewardSS := status.ComputeSSReward(cov, time)
+                rewardSSNorm := status.NormalizeSSReward(rewardSS)
+                rewardSSEst := status.EstimateSSReward(rewardSSNorm,
+                status.fuzzer.corpusPrios[pidx]/status.fuzzer.sumPrios[len(status.fuzzer.sumPrios)-1])
+                status.UpdateSeedWeight(pidx, rewardSSEst)
+                status.Reward.RewardMutateOnly.Update(rewardSS, 0.0)
+        }
+        status.fuzzer.corpus[pidx].CorpusReward.MutateCount++
+        sig := hash.Hash(status.fuzzer.corpus[pidx].Serialize())
+        log.Logf(MABLogLevel, "MAB Mutate Count for %v(%v): %v\n",
+        pidx, sig.String(), status.fuzzer.corpus[pidx].CorpusReward.MutateCount)
+        status.Reward.RawAllTasks.Update(cov, time)
+        status.Reward.RawMutateOnly.Update(cov, time)
+}
+
+
+
+//===
+
+
+
+
+
 func (status *MABStatus) UpdateWeight(itemType int, result interface{}, pr []float64) {
 	// 0 = Generate, 1 = Mutate, 2 = Triage
 	if itemType < 0 || itemType > 2 || len(pr) < 3 {
