@@ -186,7 +186,7 @@ func (proc *Proc) MABLoop() {
 	prMutateActual := float64(mutateCount) * prMutate
 	prTriageActual := float64(triageCount) * prTriage
 	prRemoveActual := float64(removeCount) * prRemove
-	prMutateArgActual := float64(mutateAgrCount) * prMutateArg
+	prMutateArgActual := float64(mutateArgCount) * prMutateArg
 	prInsertActual := float64(insertCallCount) * prInsert
 	prSpliceActual := float64(spliceCount) * prSplice
 	prSquashActual := float64(squashAnyCount) * prSquash
